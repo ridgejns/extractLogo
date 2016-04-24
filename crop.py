@@ -17,6 +17,10 @@ f7 = img[0:fH,fW*2+1:fW*3]
 f8 = img[fH+1:fH*2,fW*2+1:fW*3]
 f9 = img[fH*2+1:fH*3,fW*2+1:fW*3]
 
+f10 = img[:,0:fW]
+f11 = img[:,fW+1:fW*2]
+f12 = img[:,fW*2+1:fW*3]
+
 cv2.imwrite('./img/f1.png',f1)
 cv2.imwrite('./img/f2.png',f2)
 cv2.imwrite('./img/f3.png',f3)
@@ -26,3 +30,6 @@ cv2.imwrite('./img/f6.png',f6)
 cv2.imwrite('./img/f7.png',f7)
 cv2.imwrite('./img/f8.png',f8)
 cv2.imwrite('./img/f9.png',f9)
+cv2.imwrite('./img/f10.png',f10)
+cv2.imwrite('./img/f11.png',f11)
+cv2.imwrite('./img/f12.png',f12)
