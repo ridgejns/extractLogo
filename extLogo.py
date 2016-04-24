@@ -139,11 +139,15 @@ if __name__ == '__main__':
     logoimg = cv2.imread(imgPATH+'purelogo128.png')
 #     logoimg = cv2.resize(logoimg,(0,0),fx=0.08,fy=0.08)
     logoimggray = cv2.cvtColor(logoimg,cv2.COLOR_BGR2GRAY)
-    cap=cv2.VideoCapture(0)
     VWIDTH = 640
     VHIGH = 480
+    cap=cv2.VideoCapture(0)
     ret = cap.set(3,VWIDTH)
     ret = cap.set(4,VHIGH)
+    
+    fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+    out = cv2.VideoWriter()
+    succes = out.open('output.mp4v',fourcc, 10, (VWIDTH,VHIGH),True)
 #     for i in range(1,6):
     while(1):
         ret,img = cap.read()
@@ -165,6 +169,7 @@ if __name__ == '__main__':
         if(extractedLogo[3] is True):
             box = np.int0(cv2.boxPoints(extractedLogo[0]))
             cv2.drawContours(img, [box], -1, (0, 255, 0), 3)
+            
             cropgray = cv2.cvtColor(extractedLogo[2],cv2.COLOR_BGR2GRAY)
             kaze = cv2.KAZE_create()
             kpsrc, dessrc = kaze.detectAndCompute(logoimggray, None)
@@ -173,14 +178,19 @@ if __name__ == '__main__':
             search_params = dict(checks=50)   # or pass empty dictionary
             flann = cv2.FlannBasedMatcher(index_params,search_params)
             Ang = getRotInfo(cropgray, None, kaze, flann, kpsrc, dessrc)
+            if Ang!=None:
+                cv2.putText(img,str(Ang),(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
             print(Ang)
         else:
             print('No valid logo')
             
+#         img = cv2.flip(img,0)
+        out.write(img)
         cv2.imshow('frame',img)
         if cv2.waitKey(1) & 0xFF == 27:
             break
     cap.release()
+    out.release()
     cv2.destroyAllWindows()
 
 
