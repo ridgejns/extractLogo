@@ -1,8 +1,14 @@
-import os
+# import os
+# import sys
 import cv2
 import numpy as np
 
 def extLegoLogo(img):
+#     if(img.ndim < 3):
+#         sys.stderr.write('InputError: extLegoLogo(img) must pass a color image.\n')
+# #         return None,None,None,False
+#         sys.exit(1)
+    
     imgH,imgW,_ = img.shape
     imgHSV = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
     lower_red=np.array([0,50,50])
@@ -13,6 +19,8 @@ def extLegoLogo(img):
     mask2=cv2.inRange(imgHSV,lower_red,upper_red)
     mask = mask1+mask2
     _, contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+#     _, contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+#     print(len(contours))
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
     new_contours = []
     for idx, contour in enumerate(contours):
@@ -22,7 +30,7 @@ def extLegoLogo(img):
         # moment = cv2.moments(contour)
         area = cv2.contourArea(contour)
         perimeter = cv2.arcLength(contour, True)
-        if ((np.sqrt(area) * 4 <= perimeter * 1.1) & (np.sqrt(area) * 4 >= perimeter * 0.9)):
+        if ((np.sqrt(area) * 4 <= perimeter * 1.15) & (np.sqrt(area) * 4 >= perimeter * 0.85)):
             new_contours.append(contour)
     if(len(new_contours) == 0):
         return None,None,None,False
@@ -45,12 +53,14 @@ def extLegoLogo(img):
     H,W,_=crop.shape
     if((H<=100) | (W<=100)):
         return rect,mask,crop,False
-#     elif ((H>400) | (W>400)):
-#         return rect,mask,crop,True
     else:
         return rect,mask,crop,True
 
-def getRotInfo(imggray,mask,kaze,flann,kpsrc,dessrc):
+def getRotInfo(imggray,mask,kaze,flann,kpsrc,dessrc,flag = 0):
+
+    if(imggray.ndim > 2):
+        imggray = cv2.cvtColor(imggray,cv2.COLOR_BGR2GRAY)
+    
     kpdst, desdst = kaze.detectAndCompute(imggray, mask)
     matches = flann.knnMatch(dessrc, desdst, k=2)
     matchesMask = [[0,0] for i in range(len(matches))]
@@ -72,7 +82,8 @@ def getRotInfo(imggray,mask,kaze,flann,kpsrc,dessrc):
         dst_pts = np.float64([ kpdst[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
         
         Ang = __calcuAngle__(src_pts,dst_pts)
-        Ang = Ang/np.pi*180
+        if(flag == 0):
+            Ang = Ang/np.pi*180
         # 第三个参数Method used to computed a homography matrix. The following methods are possible:
         #0 - a regular method using all the points
         #CV_RANSAC - RANSAC-based robust method
@@ -130,24 +141,38 @@ def __calcuAngle__(pts1,pts2,checks=None):
     else:
         Ang = AngN
     rmNum = int(np.ceil(len(Ang)*0.2))
-    sorted(Ang)
+    Ang = sorted(Ang)
     Ang = Ang[rmNum:len(Ang)-rmNum]
     return np.average(Ang)
     
 if __name__ == '__main__':
     imgPATH = './img/'
-    logoimg = cv2.imread(imgPATH+'purelogo128.png')
+    logoimg = cv2.imread(imgPATH+'purelogo256.png')
 #     logoimg = cv2.resize(logoimg,(0,0),fx=0.08,fy=0.08)
     logoimggray = cv2.cvtColor(logoimg,cv2.COLOR_BGR2GRAY)
-    VWIDTH = 640
-    VHIGH = 480
+    
+    kaze = cv2.KAZE_create()
+    kpsrc, dessrc = kaze.detectAndCompute(logoimggray, None)
+    FLANN_INDEX_KDTREE = 0
+    index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
+    search_params = dict(checks=50)   # or pass empty dictionary
+    flann = cv2.FlannBasedMatcher(index_params,search_params)
+    
+#     VWIDTH = 1280
+#     VHIGH = 720
+    VWIDTH = 960
+    VHIGH = 540
+#     VWIDTH = 640
+#     VHIGH = 480
     cap=cv2.VideoCapture(0)
     ret = cap.set(3,VWIDTH)
     ret = cap.set(4,VHIGH)
     
-    fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-    out = cv2.VideoWriter()
-    succes = out.open('output.mp4v',fourcc, 10, (VWIDTH,VHIGH),True)
+#     --------frame write----------
+#    Enable this part will start frame write.
+#     fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+#     out = cv2.VideoWriter()
+#     succes = out.open('output.mp4v',fourcc, 10, (VWIDTH,VHIGH),True)
 #     for i in range(1,6):
     while(1):
         ret,img = cap.read()
@@ -162,35 +187,34 @@ if __name__ == '__main__':
         imggray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
         imgH,imgW,_ = img.shape
         
-        extractedLogo = extLegoLogo(img)  
+        extractedLogo = extLegoLogo(img)
 #         if(extractedLogo[3] is True):
 #             print('extrated logo is too close, please put further')
 #             continue
         if(extractedLogo[3] is True):
             box = np.int0(cv2.boxPoints(extractedLogo[0]))
             cv2.drawContours(img, [box], -1, (0, 255, 0), 3)
-            
             cropgray = cv2.cvtColor(extractedLogo[2],cv2.COLOR_BGR2GRAY)
-            kaze = cv2.KAZE_create()
-            kpsrc, dessrc = kaze.detectAndCompute(logoimggray, None)
-            FLANN_INDEX_KDTREE = 0
-            index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
-            search_params = dict(checks=50)   # or pass empty dictionary
-            flann = cv2.FlannBasedMatcher(index_params,search_params)
             Ang = getRotInfo(cropgray, None, kaze, flann, kpsrc, dessrc)
-            if Ang!=None:
+            if Ang != None:
                 cv2.putText(img,str(Ang),(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
-            print(Ang)
+#                 M = cv2.getRotationMatrix2D((imgW/2,imgH/2),Ang,1)
+#                 print(M)
+#                 img = cv2.warpAffine(img,M,(imgW,imgH))
+#             print(Ang)
         else:
-            print('No valid logo')
-            
-#         img = cv2.flip(img,0)
-        out.write(img)
+            cv2.putText(img,'No valid logo',(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
+#             print('No valid logo')
+#             pass
+#         out.write(img)
+
+
+        
         cv2.imshow('frame',img)
         if cv2.waitKey(1) & 0xFF == 27:
             break
     cap.release()
-    out.release()
+#     out.release()
     cv2.destroyAllWindows()
 
 
