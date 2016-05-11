@@ -198,9 +198,10 @@ if __name__ == '__main__':
             Ang = getRotInfo(cropgray, None, kaze, flann, kpsrc, dessrc)
             if Ang != None:
                 cv2.putText(img,str(Ang),(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
-#                 M = cv2.getRotationMatrix2D((imgW/2,imgH/2),Ang,1)
+                M = cv2.getRotationMatrix2D((imgW/2,imgH/2),Ang,1)
 #                 print(M)
-#                 img = cv2.warpAffine(img,M,(imgW,imgH))
+                imgR = cv2.warpAffine(img,M,(imgW,imgH))
+                
 #             print(Ang)
         else:
             cv2.putText(img,'No valid logo',(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
@@ -208,8 +209,6 @@ if __name__ == '__main__':
 #             pass
 #         out.write(img)
 
-
-        
         cv2.imshow('frame',img)
         if cv2.waitKey(1) & 0xFF == 27:
             break

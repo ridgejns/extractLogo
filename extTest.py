@@ -23,7 +23,7 @@ if __name__ == '__main__':
     ret = cap.set(4,VHIGH)
     maskNewNew = np.zeros([VHIGH,VWIDTH],np.uint8)
     while(1):
-        blankimg = np.zeros([VHIGH,VWIDTH])
+        ctline = np.zeros([VHIGH,VWIDTH])
         ret,frame = cap.read()
         framegray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
         frameH,frameW, = framegray.shape
@@ -58,58 +58,82 @@ if __name__ == '__main__':
 #             cv2.drawContours(frame, new_contours, -1, (0,255,0), 2)
 #             print('\nCT\n')
 #             print(logoContour)
-#             cv2.drawContours(frame, [logoContour], -1, (255,255), 2)
-            logoContourFlatten = logoContour.flatten()
-            logoContourX = logoContourFlatten[0:-1:2]
-            logoContourY = logoContourFlatten[1:-1:2]
-            pp1 = logoContour[logoContourX.argmax()]
-            pp2 = logoContour[logoContourX.argmin()]
-            pp3 = logoContour[logoContourY.argmax()]
-            pp4 = logoContour[logoContourY.argmin()]
-            logoContourPoint = np.array([pp1,pp2,pp3,pp4])
+            cv2.drawContours(frame, [logoContour], -1, (255,255), 2)
             
-            cv2.drawContours(frame, logoContourPoint, -1, (255,255), 2)
-            rect = cv2.minAreaRect(logoContour)
-            box = np.int0(cv2.boxPoints(rect))
-            xaxis = np.array([box[0,0],box[1,0],box[2,0],box[3,0]])
-            yaxis = np.array([box[0,1],box[1,1],box[2,1],box[3,1]])
-            cropst = np.array([yaxis.min()-10,xaxis.min()-10])
-            croped = np.array([yaxis.max()+10,xaxis.max()+10])
-            crop = framegray[cropst[0]:croped[0],cropst[1]:croped[1]]
-#             crop = cv2.resize(crop,(256,256))
-            maskNew = np.zeros([VHIGH,VWIDTH],np.uint8)
-            maskNew[cropst[0]:croped[0],cropst[1]:croped[1]] = 255
-#             framgray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-            kpdst, desdst = kaze.detectAndCompute(crop, None)
-            matches = flann.knnMatch(dessrc, desdst, k=2)
-            matchesMask = [[0,0] for i in range(len(matches))]
-            goodMatches = []
-            for i,(m,n) in enumerate(matches):
-                if m.distance < 0.7*n.distance:
-                    matchesMask[i]=[1,0]
-                    goodMatches.append(m)
-            
-            MIN_MATCH_COUNT = 10
-            if len(goodMatches) > MIN_MATCH_COUNT:
-                # 获取关键点的坐标
-                src_pts = np.float64([ kpsrc[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
-                dst_pts = np.float64([ kpdst[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
-                M, maskNewNew = cv2.findHomography(src_pts, dst_pts, cv2.LMEDS)
-#                 M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC)
-#                 M, mask = cv2.findHomography(dst_pts, src_pts, cv2.LMEDS)
-#                 M[0:2,0:2] = M[0:2,0:2]/np.linalg.norm(M[0:2,0:2],ord=2)
-# #                 
-#                 frame = cv2.warpPerspective(frame,M,(VWIDTH,VHIGH))
-#                 print(M)
-                # 获得原图像的高和宽
-                h,w = logoimggray.shape
-#                 
-#                 # 使用得到的变换矩阵对原图像的四个角进行变换，获得在目标图像上对应的坐标。
-                pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-                dst = cv2.perspectiveTransform(pts,M)
-                # 原图像为灰度图
-                cv2.polylines(frame,[np.int32(dst)],True,[255,255,255],2, cv2.LINE_AA)
+            cv2.drawContours(ctline,[logoContour], -1, (255,255), 2)
+            ctline = np.float32(ctline)
+            dst = cv2.cornerHarris(ctline,20,15,0.04)
+            dst = cv2.dilate(dst,None)
+            bk = np.zeros(ctline.shape,'uint8')
+            bk[dst>0.01*dst.max()]=255
+            _, contours2, _ = cv2.findContours(bk, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours2) == 4:
+                cv2.drawContours(frame,contours2,-1,(0,255,0), 1)
+                corner = []
+                for idx, contour in enumerate(contours2):  
+                    cnt = contour
+                    M = cv2.moments(cnt)
+                    p = [int(M['m10']/M['m00']),int(M['m01']/M['m00'])]
+                    corner.append(p)
+                    frame[p[1]-3:p[1]+3,p[0]-3:p[0]+3,:] = [0,0,255]
                 
+#             cv2.imwrite('a.png',blankimg)
+#             logoContourFlatten = logoContour.flatten()
+#             logoContourX = logoContourFlatten[0:-1:2]
+#             logoContourY = logoContourFlatten[1:-1:2]
+#             pp1 = logoContour[logoContourX.argmax()]
+#             pp2 = logoContour[logoContourX.argmin()]
+#             pp3 = logoContour[logoContourY.argmax()]
+#             pp4 = logoContour[logoContourY.argmin()]
+#             logoContourPoint = np.array([pp1,pp2,pp3,pp4])
+#             cv2.drawContours(frame, logoContourPoint, -1, (255,255), 2)
+
+###########################################################################
+###########################################################################
+#             rect = cv2.minAreaRect(logoContour)
+#             box = np.int0(cv2.boxPoints(rect))
+#             xaxis = np.array([box[0,0],box[1,0],box[2,0],box[3,0]])
+#             yaxis = np.array([box[0,1],box[1,1],box[2,1],box[3,1]])
+#             cropst = np.array([yaxis.min()-10,xaxis.min()-10])
+#             croped = np.array([yaxis.max()+10,xaxis.max()+10])
+#             crop = framegray[cropst[0]:croped[0],cropst[1]:croped[1]]
+# #             crop = cv2.resize(crop,(256,256))
+#             maskNew = np.zeros([VHIGH,VWIDTH],np.uint8)
+#             maskNew[cropst[0]:croped[0],cropst[1]:croped[1]] = 255
+# #             framgray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
+#             kpdst, desdst = kaze.detectAndCompute(crop, None)
+#             matches = flann.knnMatch(dessrc, desdst, k=2)
+#             matchesMask = [[0,0] for i in range(len(matches))]
+#             goodMatches = []
+#             for i,(m,n) in enumerate(matches):
+#                 if m.distance < 0.7*n.distance:
+#                     matchesMask[i]=[1,0]
+#                     goodMatches.append(m)
+#             
+#             MIN_MATCH_COUNT = 10
+#             if len(goodMatches) > MIN_MATCH_COUNT:
+#                 # 获取关键点的坐标
+#                 src_pts = np.float64([ kpsrc[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
+#                 dst_pts = np.float64([ kpdst[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
+#                 M, maskNewNew = cv2.findHomography(src_pts, dst_pts, cv2.LMEDS)
+# #                 M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC)
+# #                 M, mask = cv2.findHomography(dst_pts, src_pts, cv2.LMEDS)
+# #                 M[0:2,0:2] = M[0:2,0:2]/np.linalg.norm(M[0:2,0:2],ord=2)
+# # #                 
+# #                 frame = cv2.warpPerspective(frame,M,(VWIDTH,VHIGH))
+# #                 print(M)
+#                 # 获得原图像的高和宽
+#                 h,w = logoimggray.shape
+# #                 
+#                 # 使用得到的变换矩阵对原图像的四个角进行变换，获得在目标图像上对应的坐标。
+#                 pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+#                 dst = cv2.perspectiveTransform(pts,M)
+#                 # 原图像为灰度图
+#                 cv2.polylines(frame,[np.int32(dst)],True,[255,255,255],2, cv2.LINE_AA)
+###########################################################################
+###########################################################################
+
+
 #             blankimg = np.float32(blankimg)
 #             dst = cv2.cornerHarris(blankimg,2,3,0.04)
 #             dst = cv2.dilate(dst,None)
@@ -124,7 +148,8 @@ if __name__ == '__main__':
         # get the logo conture from image
         
         
-        cv2.imshow('frame',frame)
+#         cv2.imshow('frame',frame)
+        cv2.imshow('blankimg',frame)
         if cv2.waitKey(1) & 0xFF == 27:
             break
     cap.release()
