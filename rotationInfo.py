@@ -124,7 +124,9 @@ if len(goodMatches) > MIN_MATCH_COUNT:
     h,w = logoimggray.shape
     # 使用得到的变换矩阵对原图像的四个角进行变换，获得在目标图像上对应的坐标。
     pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+    print(pts)
     dst = cv2.perspectiveTransform(pts,M)
+#     print(dst)
     # 原图像为灰度图
     cv2.polylines(img,[np.int32(dst)],True,[255,255,255],2, cv2.LINE_AA)
 else:

@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 if __name__ == '__main__':
-    blankimg = cv2.imread("./img/blankimg2.png",1)
+    blankimg = cv2.imread("./img/blankimg.png",1)
     gray = cv2.cvtColor(blankimg,cv2.COLOR_BGR2GRAY)
     bk = np.zeros(gray.shape,'uint8')
     mask = np.zeros(gray.shape+np.array([2,2]),'uint8')
@@ -21,8 +21,8 @@ if __name__ == '__main__':
         M = cv2.moments(cnt)
         p = [int(M['m10']/M['m00']),int(M['m01']/M['m00'])]
         corner.append(p)
-        blankimg[p[1]:p[1]+5,p[0]:p[0]+5,:] = [0,0,255]
+        blankimg[p[1]-3:p[1]+3,p[0]-3:p[0]+3,:] = [0,0,255]
         
-    cv2.imshow('blankimg',blankimg)
-    if cv2.waitKey(0) & 0xFF == 27:
-        cv2.destroyAllWindows()
+#     cv2.imshow('blankimg',blankimg)
+#     if cv2.waitKey(0) & 0xFF == 27:
+#         cv2.destroyAllWindows()
