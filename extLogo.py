@@ -54,7 +54,7 @@ def extLegoLogo(img, minArea = 0):
     cPts = cPts.reshape(-1,1,2)
     return logoContourPts,logoContour,cPts,True
 
-def getRcvAffineInfo(img, logoContourPts, cPts, extraRotation = 0):
+def getRcvAffineInfo(logoContourPts, cPts, extraRotation = 0):
     M2 = cv2.moments(logoContourPts)
     logoCentrePt = np.int32([M2['m10']/M2['m00'],M2['m01']/M2['m00']])
     v = (cPts - logoCentrePt)
@@ -68,7 +68,7 @@ def getRcvAffineInfo(img, logoContourPts, cPts, extraRotation = 0):
     vang[pp[2]] = 0
     pp[1] = vang.argmax()
     pp[3] = vang.argmin()
-    
+    print(extraRotation)
     if abs(extraRotation) < 10:
         pass
     elif (extraRotation > 80) & (extraRotation < 100) :
@@ -79,6 +79,7 @@ def getRcvAffineInfo(img, logoContourPts, cPts, extraRotation = 0):
         pp = pp[[1,2,3,0]]
     else:
         print("invalied extraRotation")
+        return None, None, True
         
     cPts = cPts[pp]
     area = cv2.contourArea(logoContourPts)
@@ -89,9 +90,8 @@ def getRcvAffineInfo(img, logoContourPts, cPts, extraRotation = 0):
     destCPts = destCPts_0+logoCentrePt
     # recover matrix
     rcvM = cv2.getPerspectiveTransform(cPts.copy().astype('float32'), destCPts.copy().astype('float32'))
-    return cPts, rcvM
+    return cPts, rcvM, True
     # change the cPts as general from [[[x0,y0]],[[x1,y1],[[x2,y2]],[[x3,y3]]]]
-    
     
 def getRotInfo(imggray,mask,kaze,flann,kpsrc,dessrc,flag = 0):
     if(imggray.ndim > 2):
@@ -113,28 +113,13 @@ def getRotInfo(imggray,mask,kaze,flann,kpsrc,dessrc,flag = 0):
     MIN_MATCH_COUNT = 6
 #     print(len(goodMatches))
     if len(goodMatches) > MIN_MATCH_COUNT:
-        # 获取关键点的坐标
+        # get matched key points
         src_pts = np.float64([ kpsrc[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
         dst_pts = np.float64([ kpdst[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
         
         Ang = __calcuAngle__(src_pts,dst_pts)
         if(flag == 0):
             Ang = Ang/np.pi*180
-        # 第三个参数Method used to computed a homography matrix. The following methods are possible:
-        #0 - a regular method using all the points
-        #CV_RANSAC - RANSAC-based robust method
-        #CV_LMEDS - Least-Median robust method
-        # 第四个参数取值范围在1 到10，􁲁绝一个点对的阈值。原图像的点经过变换后点与目标图像上对应点的误差
-        # 超过误差就认为是outlier
-        # 返回值中M 为变换矩阵。
-#         M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
-#         # 获得原图像的高和宽
-#         h,w = logoimggray.shape
-#         # 使用得到的变换矩阵对原图像的四个角进行变换，获得在目标图像上对应的坐标。
-#         pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-#         dst = cv2.perspectiveTransform(pts,M)
-#         # 原图像为灰度图
-#         cv2.polylines(img,[np.int32(dst)],True,[255,255,255],2, cv2.LINE_AA)
     else:
         Ang = None
         print("Not enough matches are found - %d/%d" % (len(goodMatches),MIN_MATCH_COUNT))
@@ -166,8 +151,8 @@ def __calcuAngle__(pts1,pts2,checks = None):
     AngP = []
     AngN = []
     for i in range(checks):
-        v1 = (pts1[i]-pts1[i+1]).flatten()
-        v2 = (pts2[i]-pts2[i+1]).flatten()
+        v1 = (pts1[i]-pts1[i+1])
+        v2 = (pts2[i]-pts2[i+1])
         Ang = __calcuVectorAngle__(v1,v2)
         if(Ang!=None):
             if(Ang<0):
@@ -182,6 +167,8 @@ def __calcuAngle__(pts1,pts2,checks = None):
     Ang = sorted(Ang)
     Ang = Ang[rmNum:len(Ang)-rmNum]
     return np.average(Ang)
+
+
     
 if __name__ == '__main__':
     imgPATH = './img/'
@@ -226,9 +213,9 @@ if __name__ == '__main__':
         
         if(rtnFlag is True):
             cPrsRes = cPts.copy()
-            cPts, rcvM = getRcvAffineInfo(img, logoContourPts, cPts)
+            cPts, rcvM, _ = getRcvAffineInfo(logoContourPts, cPts)
             img = imgRes.copy()
-            img = cv2.warpPerspective(img, rcvM, (VWIDTH,VHIGH))
+            imggray = cv2.warpPerspective(imggray, rcvM, (VWIDTH,VHIGH))
             affinedcPts = cv2.perspectiveTransform(cPts.copy().astype('float32'),rcvM)        
             xMax,yMax = affinedcPts.max(axis=0).flatten()
             xMin,yMin = affinedcPts.min(axis=0).flatten()
@@ -236,9 +223,8 @@ if __name__ == '__main__':
 
             Ang = getRotInfo(cropedImgLogo, None, kaze, flann, kpsrc, dessrc)
             if Ang != None:
-                cv2.putText(img,str(Ang),(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
                 cPts = cPrsRes.copy()
-                cPts, rcvM = getRcvAffineInfo(img, logoContourPts, cPts, -Ang)
+                cPts, rcvM, rtnFlag = getRcvAffineInfo(logoContourPts, cPts, -Ang)
                 affinedcPts = cv2.perspectiveTransform(cPts.copy().astype('float32'),rcvM)
 #                 print(affinedcPts)
 #                 print(affinedcPts-affinedcPtsSaved)
@@ -246,10 +232,10 @@ if __name__ == '__main__':
                     affinedcPts = affinedcPtsSaved
                     rcvM = rcvMSave
                     cPts = cPtsSave
-                
+                 
                 img = imgRes.copy()
                 img = cv2.warpPerspective(img,rcvM, (VWIDTH,VHIGH))
-                
+                cv2.putText(img,str(Ang),(10,50), cv2.FONT_HERSHEY_SIMPLEX, 1,(255,255,255),2)
                 for i in range(4):    
                     cPt = affinedcPts[i].flatten()
                     img[cPt[1]-3:cPt[1]+3,cPt[0]-3:cPt[0]+3,:] = [255,0,255]
