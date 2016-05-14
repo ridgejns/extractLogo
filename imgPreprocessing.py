@@ -126,6 +126,9 @@ class LogoAffinePos(object):
             matches = getattr(self.matcherObj,self.matchMethod)(self.dessrc, desdst, k=2)
             matchesMask = [[0,0] for i in range(len(matches))]
             goodMatches = []
+            if(len(matches) is 0):
+                return None
+#             print(len(matches))
             for i,(m,n) in enumerate(matches):
                 if m.distance < 0.7*n.distance:
                     matchesMask[i]=[1,0]
@@ -223,9 +226,8 @@ class LogoAffinePos(object):
                 cPts = cPrsRes.copy()
                 cPts, rcvM, rtnFlag = self.getRcvAffineInfo(logoContourPts, cPts, -Ang)
                 if (rtnFlag is False):
-                    return logoContourPts, cPts, affinedcPts, rcvM, False
+                    return logoContourPts, cPts, affinedcPts, None, False
                 affinedcPts = cv2.perspectiveTransform(cPts.copy().astype('float32'),rcvM)
-                return logoContourPts, cPts, affinedcPts, rcvM, True
+                affinedImg = cv2.warpPerspective(img, rcvM, (imgW,imgH))
+                return logoContourPts, cPts, affinedcPts, affinedImg, True
 
-
-        
