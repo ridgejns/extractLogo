@@ -1,6 +1,9 @@
+""" This is image pre-processing module, It is used to against the warping
+    of the box and get the position of the "Lego" from image.
+    
+    Author: Lyu Yaopengfei & Li Sun
+    Date: 13-May-2016
 """
-"""
-
 
 import cv2
 import numpy as np
