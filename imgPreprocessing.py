@@ -18,54 +18,55 @@ class LogoAffinePos(object):
         self.kpsrc, self.dessrc = self.featureObj.detectAndCompute(self.logoimggray, None)
         self.matcherObj = matcherObject
         self.matchMethod = matchMethod
-        self.affinedcPtsSaved = np.zeros(8).reshape(-1,1,2)
-        self.rcvMSave = 0
-        self.cPtsSave = 0
-  
+        
+    # extracting the lego logo(red quadrangle)
     def extLegoLogo(self, img, minArea = 0):
         # It will extract the red area from the image
         self.__imgH,self.__imgW,_ = img.shape
         imgHSV = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
-        lower_red=np.array([0,40,40])
-        upper_red=np.array([10,255,255])
-        mask1=cv2.inRange(imgHSV,lower_red,upper_red)
-        lower_red=np.array([169,40,40])
-        upper_red=np.array([179,255,255])
-        mask2=cv2.inRange(imgHSV,lower_red,upper_red)
+        lower_red = np.array([0,40,40])
+        upper_red = np.array([10,255,255])
+        mask1 = cv2.inRange(imgHSV,lower_red,upper_red)
+        lower_red = np.array([169,40,40])
+        upper_red = np.array([179,255,255])
+        mask2 = cv2.inRange(imgHSV,lower_red,upper_red)
         self.redmask = mask1 + mask2
-        kernel = np.ones((5,5),np.uint8)
-#         self.redmask = cv2.dilate(self.redmask,kernel,iterations = 1)
-        self.redmask = cv2.morphologyEx(self.redmask, cv2.MORPH_CLOSE, kernel,iterations = 2)
+        
+        # erode and dilate redmask
+        kernel = np.ones((5,5), np.uint8)
+        self.redmask = cv2.dilate(self.redmask, kernel, iterations=1)
+        self.redmask = cv2.morphologyEx(self.redmask, cv2.MORPH_CLOSE, kernel, iterations=2)
 
         # It will try to get the logo contour
-        _, contourPts, _ = cv2.findContours(self.redmask.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        _,contourPts,_ = cv2.findContours(self.redmask.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         contoursPts = sorted(contourPts, key=cv2.contourArea, reverse=True)
         for idx, contourPts in enumerate(contoursPts):
+            # don't find any quadrangle area in first five contours, return false
             if idx > 5:
-                # don't find any quadrangle area in first five contours, return false
                 return None,None,False
             area = cv2.contourArea(contourPts)
             # estimated length of side
-            self.__estLength = np.sqrt(area)
+            self.estLength = np.sqrt(area)
             self.perimeter = cv2.arcLength(contourPts, True)
-            if ((self.__estLength * 4 <= self.perimeter * 1.15) & (self.__estLength * 4 >= self.perimeter * 0.85)):
+            if ((self.estLength * 4 <= self.perimeter * 1.15) & (self.estLength * 4 >= self.perimeter * 0.85)):
                 if(area < minArea):
                     return None,None,False
                 logoContourPts = contourPts
                 break
-            
+
         logoContour = np.zeros([self.__imgH,self.__imgW],'uint8')
         cv2.drawContours(logoContour, [logoContourPts], -1, 255, 10)
         return logoContourPts,logoContour,True
     
+    # detect the 4 corner points from the possible quadrangle
     def extQuadrangleCpts(self,logoContourPts,logoContour):
-        cPtsAreaRtn = cv2.cornerHarris(logoContour.copy().astype('float32'),int(self.__estLength/5),15,0.04)
+        cPtsAreaRtn = cv2.cornerHarris(logoContour.copy().astype('float32'),int(self.estLength/5),15,0.04)
         cPtsAreaRtn = cv2.dilate(cPtsAreaRtn, None)
         cPtsArea = np.zeros((self.__imgH,self.__imgW),'uint8')
         cPtsArea[cPtsAreaRtn > 0.01*cPtsAreaRtn.max()] = 255
         
         # corner points area's contour points
-        _, cptaContourPts, _ = cv2.findContours(cPtsArea, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        _,cptaContourPts,_ = cv2.findContours(cPtsArea, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         
         # quadrangle can not find exactly 4 corners, return false
         if(len(cptaContourPts) is not 4):
@@ -77,7 +78,6 @@ class LogoAffinePos(object):
             cPts[idx] = p
         cPts = cPts.reshape(-1,1,2)
         return cPts,True
-    
     
     def getRcvAffineInfo(self, logoContourPts, cPts, extraRotation = 0):
         M2 = cv2.moments(logoContourPts)
@@ -109,7 +109,7 @@ class LogoAffinePos(object):
         
         cPts = cPts[pp]
         # estimated half length of side
-        estLength_half = self.__estLength/2
+        estLength_half = self.estLength/2
         destCPts_0 = np.int32([[[-estLength_half,estLength_half]],[[-estLength_half,-estLength_half]],\
                                [[estLength_half,-estLength_half]],[[estLength_half,estLength_half]]])
         destCPts = destCPts_0+logoCentrePt
@@ -142,18 +142,18 @@ class LogoAffinePos(object):
         else:
             print('invalid matchMethod setting')
             return None
-    
         
-    #     print(len(goodMatches))
-        if len(goodMatches) > MIN_MATCH_COUNT:
-            # get matched key points
-            src_pts = np.float64([ self.kpsrc[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
-            dst_pts = np.float64([ kpdst[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
-            Ang = self.__calcuAngle(src_pts,dst_pts)
-            if(flag == 0):
-                Ang = Ang/np.pi*180
-        else:
-            Ang = None
+        if len(goodMatches) < MIN_MATCH_COUNT:
+            return None
+        
+        # get matched key points from both src and dst
+        src_pts = np.float64([ self.kpsrc[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
+        dst_pts = np.float64([ kpdst[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
+        Ang = self.__calcuAngle(src_pts,dst_pts)
+        if (Ang is None):
+            return None
+        if(flag == 0):
+            Ang = Ang/np.pi*180
 #             print("Not enough matches are found - %d/%d" % (len(goodMatches),MIN_MATCH_COUNT))
         return Ang
     
@@ -162,7 +162,7 @@ class LogoAffinePos(object):
         v2 = v2.flatten()
         L1 = np.sqrt(v1.dot(v1))
         L2 = np.sqrt(v2.dot(v2))
-        if((L1==0)|(L2==0)):
+        if((L1<=0.0000001)|(L2<=0.0000001)):
             Ang = None
         else:
             v1 = v1 / L1
@@ -175,7 +175,7 @@ class LogoAffinePos(object):
                 Ang = -1*Ang
         return Ang
 
-    def __calcuAngle(self, pts1,pts2,checks = -1):
+    def __calcuAngle(self,pts1,pts2,checks = -1):
         checkstp = min(len(pts1),len(pts2))-1
         if checks < 0:
             checks = checkstp
@@ -200,18 +200,20 @@ class LogoAffinePos(object):
         rmNum = int(np.ceil(len(Ang)*0.2))
         Ang = sorted(Ang)
         Ang = Ang[rmNum:len(Ang)-rmNum]
+        if(len(Ang) is 0):
+            return None
         return np.average(Ang)
     
     def rcvAffinedAll(self,img):
         imggray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
         imgH,imgW = imggray.shape
 #         [logoContourPts, _, cPts, rtnFlag] = self.extLegoLogo(img)
-        logoContourPts, logoContour, rtnFlag = self.extLegoLogo(img, minArea=7000)
+        logoContourPts, logoContour, rtnFlag = self.extLegoLogo(img, minArea=6000)
         if(rtnFlag is False):
-            return logoContourPts, None, None, None, False
+            return logoContourPts, None, None, None, None, False
         cPts, rtnFlag = self.extQuadrangleCpts(logoContourPts,logoContour)
         if(rtnFlag is False):
-            return logoContourPts, cPts, None, None, False
+            return logoContourPts, cPts, None, None, None, False
         else:
             cPtsRes = cPts.copy()
             cPts, rcvM, _ = self.getRcvAffineInfo(logoContourPts, cPts)
@@ -221,26 +223,24 @@ class LogoAffinePos(object):
             xMax,yMax = affinedcPts.max(axis=0).flatten() + 10
             xMin,yMin = affinedcPts.min(axis=0).flatten() - 10
             if((xMin<0) | (yMin<0) | (xMax>imgW) | (yMax>imgH)):
-                return logoContourPts, cPts, affinedcPts, rcvM, False
+                return logoContourPts, cPts, affinedcPts, None, None, False
             
             cropedImgLogo = imggray[yMin:yMax,xMin:xMax]
             
             Ang = self.getRotInfo(cropedImgLogo, None)
-#             print(Ang)
             if Ang is None:
-                return logoContourPts, cPts, affinedcPts, rcvM, False
+                return logoContourPts, cPts, affinedcPts, None, None, False
             else:
                 cPts = cPtsRes.copy()
                 cPts, rcvM, rtnFlag = self.getRcvAffineInfo(logoContourPts, cPts, -Ang)
                 if (rtnFlag is False):
-                    return logoContourPts, cPts, affinedcPts, None, False
+                    return logoContourPts, cPts, affinedcPts, None, None, False
                 affinedcPts = cv2.perspectiveTransform(cPts.copy().astype('float32'),rcvM)
                 affinedImg = cv2.warpPerspective(img, rcvM, (imgW,imgH))
                 
                 expLen = int((yMax+xMax-yMin-xMax)/40)
                 nxMin,nxMax,nyMin,nyMax = [xMin-expLen,xMax+expLen,yMax+expLen,yMax+(yMax-yMin)+expLen]
                 if((nxMin<0) | (nyMin<0) | (nxMax>imgW) | (nyMax>imgH)):
-                    return logoContourPts, cPts, affinedcPts, rcvM, False
-                self.croped = affinedImg[nyMin:nyMax,nxMin:nxMax]
-                return logoContourPts, cPts, affinedcPts, affinedImg, True
-
+                    return logoContourPts, cPts, affinedcPts, None, None, False
+                affinedCropedImg = affinedImg[nyMin:nyMax,nxMin:nxMax]
+                return logoContourPts, cPts, affinedcPts, affinedImg, affinedCropedImg, True
